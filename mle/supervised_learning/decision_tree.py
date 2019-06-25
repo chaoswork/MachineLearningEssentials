@@ -8,6 +8,8 @@ supervised_learning/decision_tree.py
 import numpy as np
 from ..utils import divide_on_feature
 from ..utils import split_func
+from ..utils import calculate_variance
+from ..utils import calculate_entropy
 
 
 class DecisionNode(object):
@@ -148,6 +150,42 @@ class DecisionTree(object):
         return y_pred
 
 
+class RegressionTree(DecisionTree):
+
+    """
+    Least Square Regression Tree
+    """
+    def _calculate_variance_reduction(self, y, y1, y2):
+        total_variance = y.shape[0] * calculate_variance(y)
+        y1_variance = y1.shape[0] * calculate_variance(y1)
+        y2_variance = y2.shape[0] * calculate_variance(y2)
+
+        # is variance_reduction always bigger than zero ?
+        # how to prove it ?
+        variance_reduction = total_variance - (y1_variance + y2_variance)
+
+        return variance_reduction
+
+    def _mean_of_y(self, y):
+        return np.mean(y, axis=0)
+
+    def fit(self, X, y):
+        self._leaf_value_calc_func = self._mean_of_y
+        self._impurity_calc_func = self._calculate_variance_reduction
+        super(RegressionTree, self).fit(X, y)
 
 
+class ClassificationTree(DecisionTree):
+    """
+    Classification Tree by Information Gain
+    """
+
+    def _calculate_information_gain(self, y, y1, y2):
+        p = len(y1) / y
+        entropy = calculate_entropy(y)
+        y1_entropy = calculate_entropy(y1)
+        y2_entropy = calculate_entropy(y2)
+        info_gain = entropy - (p * y1_entropy + (1 - p) * y2_entropy)
+
+        return info_gain
 
