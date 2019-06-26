@@ -175,7 +175,7 @@ class RegressionTree(DecisionTree):
         super(RegressionTree, self).fit(X, y)
 
 
-class ClassificationTree(DecisionTree):
+class ID3ClassificationTree(DecisionTree):
     """
     Classification Tree by Information Gain
     """
