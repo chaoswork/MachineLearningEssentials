@@ -17,17 +17,22 @@ def calculate_variance(X, axis=0, ddof=0):
     return (np.sum((X - mean) * (X - mean), axis=axis) / n_samples)
 
 
-def calculate_entropy(y):
-    """
-    $$H(label)=-\sum_{i}^{|label|}p_{i}log_{2}(p_{i})$$
-    """
+def get_element_count(y):
     labels = y.flatten().tolist()
     counts = {}
     for label in labels:
         counts[label] = counts.get(label, 0) + 1
+    return counts, len(labels)
+
+
+def calculate_entropy(y):
+    """
+    $$H(label)=-\sum_{i}^{|label|}p_{i}log_{2}(p_{i})$$
+    """
+    counts, y_len = get_element_count(y)
     entropy = 0
     for label in counts:
-        p = float(counts[label]) / len(labels)
+        p = float(counts[label]) / y_len
         entropy += -p * math.log(p, 2)
     return entropy
 
