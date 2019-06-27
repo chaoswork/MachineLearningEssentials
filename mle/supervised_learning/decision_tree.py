@@ -71,8 +71,9 @@ class DecisionTree(object):
         self.min_impurity = min_impurity
         self.max_depth = max_depth
         self.loss = loss
-        self._impurity_calc_func = None  # 分裂指标计算
+        self._impurity_calc_func = None  # 不纯度
         self._leaf_value_calc_func = None
+        self._feature_split_iter = None  # 特征分裂的迭代器
 
     def fit(self, X, y, loss=None):
         self.root = self._build_tree(X, y)

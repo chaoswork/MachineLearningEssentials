@@ -18,7 +18,9 @@ def calculate_variance(X, axis=0, ddof=0):
 
 
 def get_element_count(y):
-    labels = y.flatten().tolist()
+    labels = y
+    if isinstance(y, np.ndarray):
+        labels = y.flatten().tolist()
     counts = {}
     for label in labels:
         counts[label] = counts.get(label, 0) + 1
@@ -37,4 +39,11 @@ def calculate_entropy(y):
     return entropy
 
 
-
+def calculate_info_gain(y, y_split_parts):
+    total_entropy = calculate_entropy(y)
+    conditional_entropy = 0
+    for y_sub in y_split_parts:
+        p = float(len(y_sub)) / len(y)
+        conditional_entropy += p * calculate_entropy(y_sub)
+    info_gain = total_entropy - conditional_entropy
+    return info_gain
