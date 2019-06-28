@@ -7,11 +7,11 @@ supervised_learning/decision_tree.py
 """
 import math
 import numpy as np
-from ..utils import divide_on_feature
 from ..utils import split_func
 from ..utils import calculate_variance
 from ..utils import calculate_entropy
 from ..utils import get_element_count
+from ..utils import calculate_info_gain
 
 
 class DecisionNode(object):
@@ -27,20 +27,16 @@ class DecisionNode(object):
         determine the prediction.
     value: float
         The class prediction if classification tree, or float value if regression tree.
-    true_branch: DecisionNode
-        Next decision node for samples where features value met the threshold.
-    false_branch: DecisionNode
-        Next decision node for samples where features value did not meet the threshold.
+    child_trees: list of DecisionNode
+        Next decision node for samples where features match
     """
 
     def __init__(self, feature_i=None, threshold=None, leaf_value=None,
-                 true_branch=None, false_branch=None):
-        assert threshold and leaf_value, "Leaf or Decision, choose one"
+                 child_trees=None):
         # Decision Node
         self.feature_i = feature_i
         self.threshold = threshold
-        self.true_branch = true_branch
-        self.false_branch = false_branch
+        self.child_trees = child_trees
 
         # Leaf Node
         self.leaf_value = leaf_value
@@ -79,58 +75,55 @@ class DecisionTree(object):
         self.root = self._build_tree(X, y)
         self.loss = None
 
+    def _get_child_tree(self, x, threshold):
+        if threshold is None:
+            return x
+        return split_func(x, threshold)
+
     def _build_tree(self, X, y, current_depth=0):
         largest_impurity = 0    #
         best_criteria = None    # Feature index and threshold
-        best_sets = None        # Subsets of the data
+        best_sets_X = None
+        best_sets_y = None
 
         # shape (n, ) -> (n, 1)
         if len(np.shape(y)) == 1:
             y = np.expand_dims(y, axis=1)
 
-        Xy = np.concatenate((X, y), axis=1)
-
         n_samples, n_features = np.shape(X)
         # TODO: add num_leaves limit, maybe another parameter: level-wise/leaf-wise(Best-First)
         # https://lightgbm.readthedocs.io/en/latest/Features.html#references
         # http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.149.2862&rep=rep1&type=pdf
-        if n_samples >= self.min_data_in_leaf and current_depth <= self.max_depth:
+        if n_samples >= self.min_data_in_leaf and (
+                self.max_depth == -1 or current_depth <= self.max_depth):
             # Calculate the impurity for each feature
-            for feature_i in range(n_features):
-                feature_values = np.expand_dims(X[:, feature_i], axis=1)
-                unique_values = np.unique(feature_values)
-                # calculate the impurity
-                for threshold in unique_values:
-                    Xy1, Xy2 = divide_on_feature(Xy, feature_i, threshold)
-                    if len(Xy1) and len(Xy2):
-                        y1 = Xy1[:, n_features:]
-                        y2 = Xy2[:, n_features:]
-                        _impurity = self._impurity_calc_func(y, y1, y2)
+            for (X_split_list, y_split_list, split_strategy) in self._feature_split_iter(X, y):
+                _impurity = self._impurity_calc_func(y, y_split_list)
+                # print ('impurity = ', _impurity)
+                if largest_impurity < _impurity:
+                    largest_impurity = _impurity
+                    best_criteria = split_strategy
+                    best_sets_X = X_split_list
+                    best_sets_y = y_split_list
 
-                        if largest_impurity < _impurity:
-                            largest_impurity = _impurity
-                            best_criteria = {'feature_i': feature_i, 'threshold': threshold}
-                            best_sets = {
-                                'leftX': Xy1[:, :n_features],
-                                'lefty': Xy1[:, n_features:],
-                                'rightX': Xy2[:, :n_features],
-                                'righty': Xy2[:, n_features:]
-                            }
-        # Build left and right tree
+        # Build child tree
         if largest_impurity > self.min_impurity:
-            true_branch = self._build_tree(
-                best_sets['leftX'], best_sets['lefty'], current_depth + 1)
-            false_branch = self._build_tree(
-                best_sets['rightX'], best_sets['righty'], current_depth + 1)
+            sub_tree_dict = {}
+            for i in range(len(best_sets_X)):
+                sub_tree = self._build_tree(
+                    best_sets_X[i], best_sets_y[i], current_depth + 1)
+                child_key = self._get_child_tree(best_sets_X[i][0][best_criteria['feature_i']],
+                                                 best_criteria['threshold'])
+
+                sub_tree_dict[child_key] = sub_tree
 
             return DecisionNode(feature_i=best_criteria['feature_i'],
                                 threshold=best_criteria['threshold'],
-                                true_branch=true_branch,
-                                false_branch=false_branch)
+                                child_trees=sub_tree_dict)
 
         # Now this is a leaf node
         leaf_value = self._leaf_value_calc_func(y)
-        return DecisionNode(value=leaf_value)
+        return DecisionNode(leaf_value=leaf_value)
 
     def predict_value(self, x, tree=None):
         if tree is None:
@@ -141,16 +134,32 @@ class DecisionTree(object):
             return tree.leaf_value
 
         # now this node is a decision node
-        branch = tree.false_branch
-        feature_value = x[tree.feature_i]
-        if split_func(feature_value, tree.threshold):
-            branch = tree.true_branch
+        child_key = self._get_child_tree(x[tree.feature_i], tree.threshold)
+        if child_key not in tree.child_trees:
+            return None
+        branch = tree.child_trees[child_key]
         # recursive search
         return self.predict_value(x, branch)
 
     def predict(self, X):
         y_pred = [self.predict_value(x) for x in X]
         return y_pred
+
+    def print_tree(self, tree=None, indent=" "):
+        """ Recursively print the decision tree """
+        if not tree:
+            tree = self.root
+
+        # If we're at leaf => print the label
+        if tree.leaf_value is not None:
+            print (tree.leaf_value)
+        # Go deeper down the tree
+        else:
+            # Print test
+            print ("%s:%s? " % (tree.feature_i, tree.threshold))
+            for child_key in tree.child_trees:
+                print ("{} [{}]->".format(indent, child_key)),
+                self.print_tree(tree.child_trees[child_key], indent + indent)
 
 
 class RegressionTree(DecisionTree):
@@ -183,14 +192,21 @@ class ID3ClassificationTree(DecisionTree):
     ID3 Classification Tree by Information Gain
     """
 
-    def _calculate_information_gain(self, y, y1, y2):
-        p = len(y1) / y
-        entropy = calculate_entropy(y)
-        y1_entropy = calculate_entropy(y1)
-        y2_entropy = calculate_entropy(y2)
-        info_gain = entropy - (p * y1_entropy + (1 - p) * y2_entropy)
+    def _split_iter(self, X, y):
+        n_samples, n_features = np.shape(X)
+        Xy = np.concatenate((X, y), axis=1)
+        for feature_i in range(n_features):
+            feature_values = np.expand_dims(X[:, feature_i], axis=1)
+            unique_values = np.unique(feature_values)
+            X_split_list = []
+            y_split_list = []
+            split_strategy = {'feature_i': feature_i, 'threshold': None}
+            for x_value in unique_values:
+                Xy_select = np.array([x for x in Xy if x[feature_i] == x_value])
+                X_split_list.append(Xy_select[:, :n_features])
+                y_split_list.append(Xy_select[:, n_features:])
 
-        return info_gain
+            yield (X_split_list, y_split_list, split_strategy)
 
     def _majority_vote(self, y):
         counts, y_len = get_element_count(y)
@@ -199,7 +215,8 @@ class ID3ClassificationTree(DecisionTree):
 
     def fit(self, X, y):
         self._leaf_value_calc_func = self._majority_vote
-        self._impurity_calc_func = self._calculate_information_gain
+        self._impurity_calc_func = calculate_info_gain
+        self._feature_split_iter = self._split_iter
         super(ID3ClassificationTree, self).fit(X, y)
 
 
