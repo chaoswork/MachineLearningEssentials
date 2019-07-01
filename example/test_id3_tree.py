@@ -1,5 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+"""
+train and test data reference: 
+https://www.python-course.eu/Decision_Trees.php
+http://archive.ics.uci.edu/ml/datasets/zoo
+"""
 import sys
 import numpy as np
 
@@ -7,12 +12,11 @@ sys.path.append('.')
 from mle.supervised_learning.decision_tree import ID3ClassificationTree
 
 
-
 import pandas as pd
 
 # Import the dataset and define the feature as well as the target datasets / columns#
 # Import all columns omitting the fist which consists the names of the animals
-dataset = pd.read_csv('data/zoo.data',
+dataset = pd.read_csv('data/uci/zoo/zoo.data',
                       names=['animal_name', 'hair', 'feathers', 'eggs', 'milk',
                              'airbone', 'aquatic', 'predator', 'toothed', 'backbone',
                              'breathes', 'venomous', 'fins', 'legs', 'tail',
