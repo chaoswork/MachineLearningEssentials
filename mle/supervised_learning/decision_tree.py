@@ -2,8 +2,15 @@
 # -*- coding: utf-8 -*-
 """
 Decision Tree
-reference: https://github.com/eriklindernoren/ML-From-Scratch/blob/master/mlfromscratch/
-supervised_learning/decision_tree.py
+reference:
+1. https://github.com/eriklindernoren/ML-From-Scratch/blob/master/mlfromscratch/
+   supervised_learning/decision_tree.py
+
+2. https://github.com/rasbt/python-machine-learning-book/blob/master/faq/decision-tree-binary.md
+For practical reasons (combinatorial explosion) most libraries implement decision trees
+with binary splits. The nice thing is that they are NP-complete
+(Hyafil, Laurent, and Ronald L. Rivest. "Constructing optimal binary decision trees is
+NP-complete." Information Processing Letters 5.1 (1976): 15-17.)
 """
 import math
 import numpy as np
@@ -60,7 +67,7 @@ class DecisionTree(object):
         Loss function that is used for Gradient Boosting models to calculate impurity.
     """
 
-    def __init__(self, decision_type, min_data_in_leaf=20, min_impurity=1e-7, max_depth=-1,
+    def __init__(self, decision_type='is', min_data_in_leaf=20, min_impurity=1e-7, max_depth=-1,
                  num_leaves=31, loss=None):
         self.decision_type = decision_type  # no_lesser/is
         self.root = None
@@ -118,7 +125,7 @@ class DecisionTree(object):
                 child_key = self._get_child_tree(best_sets_X[i][0][best_criteria['feature_i']],
                                                  best_criteria['threshold'])
 
-                sub_tree_dict[child_key] = sub_tree
+                sub_tree_dict[child_key] = (sub_tree, i)  # index for print tree
 
             return DecisionNode(feature_i=best_criteria['feature_i'],
                                 threshold=best_criteria['threshold'],
@@ -141,7 +148,7 @@ class DecisionTree(object):
         child_key = self._get_child_tree(x[tree.feature_i], tree.threshold)
         if child_key not in tree.child_trees:
             return None
-        branch = tree.child_trees[child_key]
+        branch = tree.child_trees[child_key][0]
         # recursive search
         return self.predict_value(x, branch)
 
@@ -149,27 +156,42 @@ class DecisionTree(object):
         y_pred = [self.predict_value(x) for x in X]
         return y_pred
 
-    def print_tree(self, tree=None, indent=""):
+    def __str__(self, tree=None, indent=""):
         """ Recursively print the decision tree """
+        trees_str = ""
         if not tree:
             tree = self.root
+            trees_str += "def predict(feature):\n"
+            indent = "    "
 
         # If we're at leaf => print the label
         if tree.leaf_value is not None:
-            print ("{}return {}".format(indent, tree.leaf_value))
+            return "\n{}return {}".format(indent, tree.leaf_value)
         # Go deeper down the tree
         else:
-            # Print test
             if self.decision_type == 'no_lesser':
                 operator = '>='
             elif self.decision_type == 'is':
                 operator = '=='
-            # print ("%s:%s? " % (tree.feature_i, tree.threshold))
-            for child_key in tree.child_trees:
-                # print ("{} [{}]->".format(indent, child_key)),
-                print ("{}if feature[{}] {} {}:".format(
-                    indent, tree.feature_i, operator, child_key))
-                self.print_tree(tree.child_trees[child_key], indent + "    ")
+            for (child_key, (tree_branch, index)) in sorted(
+                    tree.child_trees.items(), key=lambda x: x[1][1]):
+                threshold = tree.threshold
+                if threshold is None:
+                    threshold = child_key
+
+                # index = 0 -> if, others -> elif
+                cond = 'elif'
+                if index == 0:
+                    cond = 'if'
+                elif index == len(tree.child_trees) - 1:
+                    if self.decision_type == 'no_lesser':
+                        cond = 'else:#'
+
+                trees_str += "\n{}{} feature[{}] {} {}:".format(
+                    indent, cond, tree.feature_i, operator, threshold).split('#')[0]
+                sub_tree = self.__str__(tree_branch, indent + "    ")
+                trees_str += sub_tree
+            return trees_str
 
 
 class RegressionTree(DecisionTree):
@@ -177,8 +199,11 @@ class RegressionTree(DecisionTree):
     """
     Least Square Regression Tree
     """
-    def _calculate_variance_reduction(self, y, y1, y2):
+    def _calculate_variance_reduction(self, y, y_split_list):
+        assert len(y_split_list) == 2, "only support binary regression tree now"
         total_variance = y.shape[0] * calculate_variance(y)
+        y1 = y_split_list[0]
+        y2 = y_split_list[1]
         y1_variance = y1.shape[0] * calculate_variance(y1)
         y2_variance = y2.shape[0] * calculate_variance(y2)
 
@@ -188,12 +213,30 @@ class RegressionTree(DecisionTree):
 
         return variance_reduction
 
+    def _split_iter(self, X, y):
+        n_samples, n_features = np.shape(X)
+        Xy = np.concatenate((X, y), axis=1)
+        for feature_i in range(n_features):
+            feature_values = np.expand_dims(X[:, feature_i], axis=1)
+            unique_values = np.unique(feature_values)
+            for threshold in unique_values:
+                split_strategy = {'feature_i': feature_i, 'threshold': threshold}
+                Xy_1 = np.array([x for x in Xy if x[feature_i] >= threshold])
+                Xy_2 = np.array([x for x in Xy if x[feature_i] < threshold])
+                if len(Xy_1) and len(Xy_2):
+                    X_split_list = [Xy_1[:, :n_features], Xy_2[:, :n_features]]
+                    y_split_list = [Xy_1[:, n_features:], Xy_2[:, n_features:]]
+
+                    yield (X_split_list, y_split_list, split_strategy)
+
     def _mean_of_y(self, y):
         return np.mean(y, axis=0)
 
     def fit(self, X, y):
+        self.decision_type = 'no_lesser'
         self._leaf_value_calc_func = self._mean_of_y
         self._impurity_calc_func = self._calculate_variance_reduction
+        self._feature_split_iter = self._split_iter
         super(RegressionTree, self).fit(X, y)
 
 
@@ -224,6 +267,7 @@ class ID3ClassificationTree(DecisionTree):
         return most_common
 
     def fit(self, X, y):
+        self.decision_type = 'is'
         self._leaf_value_calc_func = self._majority_vote
         self._impurity_calc_func = calculate_info_gain
         self._feature_split_iter = self._split_iter

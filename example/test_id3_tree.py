@@ -43,7 +43,7 @@ test_targets = dataset.iloc[80:, -1].values
 # print(train_targets.tolist(), len(train_targets.tolist()))
 id3 = ID3ClassificationTree(decision_type='is', min_data_in_leaf=0)
 id3.fit(train_features, train_targets)
-id3.print_tree()
+print(id3)
 # print (id3.root.feature_i, id3.root.threshold, id3.root.leaf_value, id3.root.child_trees)
 
 predicted = id3.predict(test_features)
