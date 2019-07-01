@@ -7,7 +7,6 @@ supervised_learning/decision_tree.py
 """
 import math
 import numpy as np
-from ..utils import split_func
 from ..utils import calculate_variance
 from ..utils import calculate_entropy
 from ..utils import get_element_count
@@ -32,10 +31,11 @@ class DecisionNode(object):
     """
 
     def __init__(self, feature_i=None, threshold=None, leaf_value=None,
-                 child_trees=None):
+                 child_trees=None, decision_type='no_lesser'):
         # Decision Node
         self.feature_i = feature_i
         self.threshold = threshold
+        self.decision_type = decision_type
         self.child_trees = child_trees
 
         # Leaf Node
@@ -60,8 +60,9 @@ class DecisionTree(object):
         Loss function that is used for Gradient Boosting models to calculate impurity.
     """
 
-    def __init__(self, min_data_in_leaf=20, min_impurity=1e-7, max_depth=-1,
+    def __init__(self, decision_type, min_data_in_leaf=20, min_impurity=1e-7, max_depth=-1,
                  num_leaves=31, loss=None):
+        self.decision_type = decision_type  # no_lesser/is
         self.root = None
         self.min_data_in_leaf = min_data_in_leaf
         self.min_impurity = min_impurity
@@ -78,7 +79,9 @@ class DecisionTree(object):
     def _get_child_tree(self, x, threshold):
         if threshold is None:
             return x
-        return split_func(x, threshold)
+        if self.decision_type == 'no_lesser':
+            return x >= threshold
+        return x == threshold
 
     def _build_tree(self, X, y, current_depth=0):
         largest_impurity = 0    #
@@ -119,6 +122,7 @@ class DecisionTree(object):
 
             return DecisionNode(feature_i=best_criteria['feature_i'],
                                 threshold=best_criteria['threshold'],
+                                decision_type=self.decision_type,
                                 child_trees=sub_tree_dict)
 
         # Now this is a leaf node
@@ -145,21 +149,27 @@ class DecisionTree(object):
         y_pred = [self.predict_value(x) for x in X]
         return y_pred
 
-    def print_tree(self, tree=None, indent=" "):
+    def print_tree(self, tree=None, indent=""):
         """ Recursively print the decision tree """
         if not tree:
             tree = self.root
 
         # If we're at leaf => print the label
         if tree.leaf_value is not None:
-            print (tree.leaf_value)
+            print ("{}return {}".format(indent, tree.leaf_value))
         # Go deeper down the tree
         else:
             # Print test
-            print ("%s:%s? " % (tree.feature_i, tree.threshold))
+            if self.decision_type == 'no_lesser':
+                operator = '>='
+            elif self.decision_type == 'is':
+                operator = '=='
+            # print ("%s:%s? " % (tree.feature_i, tree.threshold))
             for child_key in tree.child_trees:
-                print ("{} [{}]->".format(indent, child_key)),
-                self.print_tree(tree.child_trees[child_key], indent + indent)
+                # print ("{} [{}]->".format(indent, child_key)),
+                print ("{}if feature[{}] {} {}:".format(
+                    indent, tree.feature_i, operator, child_key))
+                self.print_tree(tree.child_trees[child_key], indent + "    ")
 
 
 class RegressionTree(DecisionTree):
