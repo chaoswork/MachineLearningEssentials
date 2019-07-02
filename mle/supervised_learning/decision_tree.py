@@ -286,3 +286,36 @@ class C45ClassificationTree(ID3ClassificationTree):
         self._impurity_calc_func = calculate_info_gain_ratio
         self._feature_split_iter = self._split_iter
         super(C45ClassificationTree, self).fit(X, y)
+
+
+class ClassificationTree(DecisionTree):
+    """
+    ClassificationTree
+    """
+    def _binary_split_iter(self, X, y):
+        n_samples, n_features = np.shape(X)
+        Xy = np.concatenate((X, y), axis=1)
+        for feature_i in range(n_features):
+            feature_values = np.expand_dims(X[:, feature_i], axis=1)
+            unique_values = np.unique(feature_values)
+            for threshold in unique_values:
+                split_strategy = {'feature_i': feature_i, 'threshold': threshold}
+                Xy_1 = np.array([x for x in Xy if x[feature_i] >= threshold])
+                Xy_2 = np.array([x for x in Xy if x[feature_i] < threshold])
+                if len(Xy_1) and len(Xy_2):
+                    X_split_list = [Xy_1[:, :n_features], Xy_2[:, :n_features]]
+                    y_split_list = [Xy_1[:, n_features:], Xy_2[:, n_features:]]
+
+                    yield (X_split_list, y_split_list, split_strategy)
+
+    def _majority_vote(self, y):
+        counts, y_len = get_element_count(y)
+        most_common = sorted(counts.items(), key=lambda x: x[1], reverse=True)[0][0]
+        return most_common
+
+    def fit(self, X, y):
+        self.decision_type = 'is'
+        self._leaf_value_calc_func = self._majority_vote
+        self._impurity_calc_func = calculate_info_gain
+        self._feature_split_iter = self._binary_split_iter
+        super(ClassificationTree, self).fit(X, y)
