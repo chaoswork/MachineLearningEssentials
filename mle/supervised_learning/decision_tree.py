@@ -18,6 +18,7 @@ from ..utils import calculate_variance
 from ..utils import calculate_entropy
 from ..utils import get_element_count
 from ..utils import calculate_info_gain
+from ..utils import calculate_info_gain_ratio
 
 
 class DecisionNode(object):
@@ -274,30 +275,14 @@ class ID3ClassificationTree(DecisionTree):
         super(ID3ClassificationTree, self).fit(X, y)
 
 
-class C45ClassificationTree(DecisionTree):
+class C45ClassificationTree(ID3ClassificationTree):
     """
     C4.5 Classification Tree by Information Gain
     """
 
-    def _calculate_information_gain_ratio(self, y, y1, y2):
-        p = len(y1) / y
-        entropy = calculate_entropy(y)
-        y1_entropy = calculate_entropy(y1)
-        y2_entropy = calculate_entropy(y2)
-        info_gain = entropy - (p * y1_entropy + (1 - p) * y2_entropy)
-        info_gain_ratio = info_gain / (-p * math.log(p, 2) - (1 - p) * math.log(1 - p, 2))
-        # TODO C4.5 / ID3 is not a binary tree, so the frame need to update
-
-        return info_gain_ratio
-
-    def _majority_vote(self, y):
-        counts, y_len = get_element_count(y)
-        most_common = sorted(counts.items(), key=lambda x: x[1], reverse=True)[0][0]
-        return most_common
-
     def fit(self, X, y):
+        self.decision_type = 'is'
         self._leaf_value_calc_func = self._majority_vote
-        self._impurity_calc_func = self._calculate_information_gain_ratio
-        super(ID3ClassificationTree, self).fit(X, y)
-
-
+        self._impurity_calc_func = calculate_info_gain_ratio
+        self._feature_split_iter = self._split_iter
+        super(C45ClassificationTree, self).fit(X, y)

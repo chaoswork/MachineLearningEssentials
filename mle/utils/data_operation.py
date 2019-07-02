@@ -47,3 +47,12 @@ def calculate_info_gain(y, y_split_parts):
         conditional_entropy += p * calculate_entropy(y_sub)
     info_gain = total_entropy - conditional_entropy
     return info_gain
+
+
+def calculate_info_gain_ratio(y, y_split_parts):
+    info_gain = calculate_info_gain(y, y_split_parts)
+    split_info = 0
+    for y_sub in y_split_parts:
+        p = float(len(y_sub)) / len(y)
+        split_info += -p * math.log(p, 2)
+    return info_gain / split_info
